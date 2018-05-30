@@ -737,3 +737,92 @@ This can be implemented like this
 comprehensions with predicates that correspond to the elements that are smaller
 or larger than the first element of the list. The last line implements the
 recursive algorithm.
+
+## Chapter 5: Higher-order functions
+
+All functions take only one parameter. Functions that take more than one
+parameter are implemented under the hood as a chain of partially evaluated
+(curried) functions. Hence the types, e.g.
+
+    replicate' :: Int -> a -> [a]
+
+This function is made up of one function that takes an Int, and returns a
+function that takes an `a`, and returns a list of `[a]`.
+
+Or find an individual arrow in a type. The arrow is the single parameter
+function. It takes the thing immediately to the left. And returns a function
+defined by the next arrow.
+
+So the first arrow in the above defintion refers to a function that takes `Int`
+and returns a function that maps from `a` to `[a]`.
+
+Consider a function with three parameters
+
+```
+multThree :: Int -> Int -> Int -> Int
+multThree a b c = a*b*c
+```
+
+The type of this function can be rewritten
+
+    multThree :: Int -> (Int -> (Int -> Int))
+
+to make the fact that -> is right-associative clearer. Parens denote one of
+these one parameter functions.
+
+Written like that, the first function takes an Int, and returns a function of
+type `Int -> (Int -> Int)`, i.e. a function that takes an `Int` and returns a
+function of type `Int -> Int`, etc.
+
+To partially evaluate a function, you can do
+
+    > let multTwoNumbersWithNine = multThree 9
+    > multTwoNumbersWithNine 2 3
+    54
+
+Here the expression `multThree 9` is a function of type `Int -> (Int -> Int)`.
+
+Consider this function
+
+    compareWithHundred :: Int -> Ordering
+    compareWithHundred x = compare 100 x
+
+then
+
+    > compareWithHundred 99
+    GT
+
+i.e. 100 is greater than 99. The above definition is equivalent to
+
+    compareWithHundred :: Int -> Ordering
+    compareWithHundred = compare 100
+
+Note the type definition is the same. That's because
+
+    compare :: Ord a => a -> a -> Ordering
+
+so `compare x` is of type `a -> Ordering` where `a` is the type of `x`.
+
+Infix functions can be partially applied using _sections_. To section an infix,
+surround it with parens and supply param on only one side.
+
+    divideByTen :: (Floating a) => a -> a
+    divideByTen = (/10)
+
+This is equivalent to the full definition
+
+    divideByTen :: (Floating a) => a -> a
+    divideByTen x = x/10
+
+Or
+
+    contains10 :: [Int] -> Bool
+    contains10 = (10 `elem`)
+
+You can't directly print a partially applied function:
+
+    > let multTwoNumbersWithNine = multThree 9  -- this works
+    > multThree 9                               -- this doesn't
+
+That's because functions aren't instances of the `Show` type class, i.e. they
+don't know how to print themselves.

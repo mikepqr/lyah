@@ -102,3 +102,9 @@ quicksort (x:xs) =
     let smallerOrEqual = [a | a <- xs, a <= x]
         larger = [a | a <- xs, a > x]
     in  quicksort smallerOrEqual ++ [x] ++ quicksort larger
+
+divideByTen :: (Floating a) => a -> a
+divideByTen = (/10)
+
+contains10 :: [Int] -> Bool
+contains10 = (10 `elem`)
