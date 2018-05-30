@@ -780,9 +780,15 @@ To partially evaluate a function, you can do
     > multTwoNumbersWithNine 2 3
     54
 
-Here the expression `multThree 9` is a function of type `Int -> (Int -> Int)`.
+Here the expression `multThree 9` evaluates to a function of type `Int -> (Int
+-> Int)`.
 
-Consider this function
+What all this means is that, if you give too few parameters to a function that
+returns a value, you get back a partially evaluated function, rather than a
+value. This is different from python, where you have curry by hand (e.g. using
+`functools.partial`), and giving too few parameters results in an error.
+
+Consider this normal function
 
     compareWithHundred :: Int -> Ordering
     compareWithHundred x = compare 100 x
@@ -792,16 +798,16 @@ then
     > compareWithHundred 99
     GT
 
-i.e. 100 is greater than 99. The above definition is equivalent to
+i.e. 100 is greater than 99. The above definition is _equivalent_ to
 
     compareWithHundred :: Int -> Ordering
     compareWithHundred = compare 100
 
-Note the type definition is the same. That's because
+Note the type definition is the same. That's because the builtin `compare`
 
     compare :: Ord a => a -> a -> Ordering
 
-so `compare x` is of type `a -> Ordering` where `a` is the type of `x`.
+so `compare foo` is of type `a -> Ordering` where `a` is the type of `foo`.
 
 Infix functions can be partially applied using _sections_. To section an infix,
 surround it with parens and supply param on only one side.
