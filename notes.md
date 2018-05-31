@@ -738,7 +738,22 @@ comprehensions with predicates that correspond to the elements that are smaller
 or larger than the first element of the list. The last line implements the
 recursive algorithm.
 
+In python this would look like
+
+```python
+def quicksort(xs):
+    if len(xs) == 0:
+        return []
+    else:
+        head, tail = xs[0], xs[1:]
+        smaller_equal = [x for x in tail if x <= head]
+        larger = [x for x in tail if x > head]
+        return quicksort(smaller_equal) + [head] + quicksort(larger)
+```
+
 ## Chapter 5: Higher-order functions
+
+### Partial evaluation
 
 All functions take only one parameter. Functions that take more than one
 parameter are implemented under the hood as a chain of partially evaluated
@@ -809,6 +824,17 @@ Note the type definition is the same. That's because the builtin `compare`
 
 so `compare foo` is of type `a -> Ordering` where `a` is the type of `foo`.
 
+
+You can't directly print a partially applied function:
+
+    > let multTwoNumbersWithNine = multThree 9  -- this works
+    > multThree 9                               -- this doesn't
+
+That's because functions aren't instances of the `Show` type class, i.e. they
+don't know how to print themselves.
+
+### Partial evaluation of infix functions (sessions)
+
 Infix functions can be partially applied using _sections_. To section an infix,
 surround it with parens and supply param on only one side.
 
@@ -825,10 +851,181 @@ Or
     contains10 :: [Int] -> Bool
     contains10 = (10 `elem`)
 
-You can't directly print a partially applied function:
+### Functions as parameters
 
-    > let multTwoNumbersWithNine = multThree 9  -- this works
-    > multThree 9                               -- this doesn't
+The type of a function that takes a function as a parameter is, e.g.
 
-That's because functions aren't instances of the `Show` type class, i.e. they
-don't know how to print themselves.
+    applyTwice :: (a -> a) -> a -> a
+    applyTwice f x = f (f x)
+
+The parens in the type are necessary because -> is right associative.
+
+### zipWith and flip
+
+Two functions in the standard library reimplemented:
+
+Zip two lists together applying a function that takes two parameters to each
+tuple (rather than just constructing a list of tuples).
+
+```
+zipWith' :: (a -> b -> c) -> [a] -> [b] -> [c]
+zipWith' _ [] _ = []
+zipWith' _ _ [] = []
+zipWith' f (x:xs) (y:ys) = f x y : zipWith' f xs ys
+```
+
+flip the arguments of a function
+
+```
+flip' :: (a -> b -> c) -> (b -> a -> c)
+flip' f x y = f y x
+```
+
+Note here the type is takes a function, returns a function. The definition
+defines a function and expects three parameters. Calling `flip f` returns the
+flipped function, because of partial evaluation.
+
+An equivalent, but more pythonic definition is
+
+```
+flip' f = g
+    where g x y = f y x
+```
+
+This is essentially a translation of
+
+```python
+def flip(f):
+    def g(x, y):
+        return f(y, x)
+    return g
+```
+
+So the pythonic version returns a function definition. The more idiomatic
+Haskell version returns a partially evaluated function (that carries with it
+the definition for full evaluation). Kind of.
+
+Examples:
+
+```
+> zipWith (/) [1, 2, 3] [3, 3, 3]
+[0.3333333333333333,0.6666666666666666,1.0]
+> zipWith (flip (/)) [1, 2, 3] [3, 3, 3]
+[3.0,1.5,1.0]
+```
+
+I'm guessing flip is useful because the kind of implicit partial evaluation
+you get when you pass too few parameters is strictly in parameter order.
+
+### map, filter, takeWhile
+
+```
+map :: (a -> b) -> [a] -> [b]
+map _ [] = []
+map f (x:xs) = f x : map f xs
+
+filter :: (a -> Bool) -> [a] -> [a]
+filter _ [] = []
+filter predicate (x:xs)
+    | predicate x = x : filter p xs
+    | otherwise   = filter p xs
+```
+
+As with Python, maps and filters can be achieved with list comprehensions. maps
+of maps tend to be more readable than nested comprehensions. e.g.
+
+```
+> map (+3) [1,5,3,1,6]
+[4,8,6,4,9]
+> [x + 3 | x <- [1,5,3,1,6]]
+[4,8,6,4,9]
+```
+
+More map/filter examples. To find the largest number under 100,000 that is
+divisible by 3829:
+
+```
+largestDivisible :: Integer
+largestDivisible = head (filter p [99999,99998..])
+    where p x = x `mod` 3829 == 0
+```
+
+`head` here is lazy, so we only test values until we find one that satisfies
+the predicate.
+
+Here's my implementation of takeWhile
+
+```
+takeWhile' :: (a -> Bool) -> [a] -> [a]
+takeWhile' _ [] = []
+takeWhile' p (x:xs)
+    | p x = x : takeWhile' p xs
+    | otherwise = []
+```
+
+Sum of all odd squares less than 10,000:
+
+```
+> sum (takeWhile (<10000) (filter odd (map (^2) [1..])))
+166650
+```
+
+Mapping a function that takes more than one parameter results in a list of
+partially evaluated functions, e.g.
+
+```
+> let listOfFuncs = map (*) [0..]
+> (listOfFuncs !! 4) 5
+20
+```
+
+### Lambdas
+
+```
+largestDivisible :: Integer
+largestDivisible = head (filter p [99999,99998..])
+    where p x = x `mod` 3829 == 0
+```
+
+can be rewritten as
+
+```
+largestDivisible = head (filter (\x -> x `mod` 3829 == 0) [99999,99998..])
+```
+
+The `\` denotes the beginning of a lambda function. The parameters of the
+lambda (if more than one) are separated by spaces after the `\`. The function
+body comes after a `->` (not an `=` as with regular function definitions).
+
+Partial evaluation is so easy to do in Haskell that it is generally preferred
+to lambdas, e.g. `map (+3) [1,6,3,2]` is preferred to `map (\x -> x + 3)
+[1,6,3,2]`.
+
+You can pattern match in lambdas, but only on one pattern. In effect, this
+means you can do tuple unpacking:
+
+```
+> map (\(a,b) -> a+b) [(1,2), (3,4)]
+[3,7]
+```
+
+The book argues that this definition
+
+    flip' f = (\x y -> f y x)
+
+or equivalently
+
+    flip' f = \x y -> f y x
+
+is clearer about intended use than the equivalent used above
+
+    flip' f x y = f y x
+
+By returning a lambda expression, i.e. a function, you make clear the expected
+use is to produce a new function (which is the most common use case of flip),
+rather than to evaluate that new function. The original definition can also be
+used to produce a partially evaluated function, but it's less clear from the
+definition that that's what you're _supposed_ to do. Or at least I think that's
+his argument.
+
+### Folds

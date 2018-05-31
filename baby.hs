@@ -108,3 +108,15 @@ divideByTen = (/10)
 
 contains10 :: [Int] -> Bool
 contains10 = (10 `elem`)
+
+takeWhile' :: (a -> Bool) -> [a] -> [a]
+takeWhile' _ [] = []
+takeWhile' p (x:xs)
+    | p x = x : takeWhile' p xs
+    | otherwise = []
+
+addThree :: Int -> Int -> Int -> Int
+addThree a b c = a + b + c
+
+addThree' :: Int -> Int -> Int -> Int
+addThree' = \a -> (\b -> (\c -> a + b + c))
