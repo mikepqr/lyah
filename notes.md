@@ -768,8 +768,8 @@ Or find an individual arrow in a type. The arrow is the single parameter
 function. It takes the thing immediately to the left. And returns a function
 defined by the next arrow.
 
-So the first arrow in the above defintion refers to a function that takes `Int`
-and returns a function that maps from `a` to `[a]`.
+So the first arrow in the above definition refers to a function that takes
+`Int` and returns a function that maps from `a` to `[a]`.
 
 Consider a function with three parameters
 
@@ -824,7 +824,6 @@ Note the type definition is the same. That's because the builtin `compare`
 
 so `compare foo` is of type `a -> Ordering` where `a` is the type of `foo`.
 
-
 You can't directly print a partially applied function:
 
     > let multTwoNumbersWithNine = multThree 9  -- this works
@@ -833,7 +832,7 @@ You can't directly print a partially applied function:
 That's because functions aren't instances of the `Show` type class, i.e. they
 don't know how to print themselves.
 
-### Partial evaluation of infix functions (sessions)
+### Partial evaluation of infix functions (sections)
 
 Infix functions can be partially applied using _sections_. To section an infix,
 surround it with parens and supply param on only one side.
@@ -1029,3 +1028,117 @@ definition that that's what you're _supposed_ to do. Or at least I think that's
 his argument.
 
 ### Folds
+
+The x:xs pattern used a lot above is better down with the `fold` builtin. A
+fold takes a binary function (i.e. a function with two parameters), a starting
+value (the accumulator) and a list. Lists can be folded from the left or the
+right. The binary function is called with the accumulator and the next item on
+the list. So
+
+    sum' :: (Num a) => [a] -> a
+    sum' xs = foldl (\acc x -> acc + x) 0 xs
+
+or equivalently (although apparently the first one is more idiomatic)
+
+    sum' xs = foldl f 0 xs
+        where f a b = a + b
+
+or using sections (partial evaluation of infix functions)
+
+    sum' xs = foldl (+) 0 xs
+
+or, since functions with too few parameters are curried 
+
+    sum' xs = foldl (+) 0 xs
+
+Right fold (`foldr`) is the same except it eats up values from the right, and
+the order of params in the binary function is reversed: the current list value
+is the _first_ parameter, and the accumulator the second.
+
+The accumulator can be of any type. E.g. if it's a list we can implement `map`
+
+    map' :: (a -> b) -> [a] -> [b]
+    map' f xs = foldl (\acc x -> acc ++ [f x]) [] xs
+
+However, because `++` (append) is much slower than `:` (prepend) this is faster
+as a right fold:
+
+    map' f xs = foldr (\x acc -> f x:acc) [] xs
+
+Crucially, right folds work on infinite lists but left folds don't?!
+
+Here's `elem` with `foldr`
+
+    elem' :: (Eq a) => a -> [a] -> Bool
+    elem' y ys = foldr (\x acc -> if x == y then True else acc) False ys
+
+### foldl1 and foldr1
+
+Just like `foldl` and `foldr` except they assume the starting value of the
+accumulator is the first thing in the list, e.g.
+
+    maximum' :: (Ord a) => [a] -> a
+    maximum' = foldl1 max
+
+These functions cause runtime errors if called on the empty list.
+
+### More fold examples
+
+    reverse' :: [a] -> [a]
+    reverse' = foldl (\x acc -> x : acc) []
+
+or even
+
+    reverse' = foldl (flip (:)) []
+
+This latter works because the lambda function is just like `:` except the
+parameters are flipped.
+
+```
+product' :: (Num a) => [a] -> a
+product' = foldl (*) 1
+
+filter' :: (a -> Bool) -> [a] -> [a]
+filter' p = foldr (\x acc -> if p x then x:acc else acc) []
+
+last' :: [a] -> a
+last' = foldl1 (\_ x -> x)
+```
+
+### Folds and infinite lists
+
+Right folds are essentially doing this (e.g. sum [3,4,5,6])
+
+    3 + (4 + (5 + (6 + 0)))
+
+Left folds do this
+
+    (((0 + 3) + 4) + 5) + 6
+
+Right folds can therefore work on infinite lists if the binary function doesn't
+need the second parameter for some reason (e.g. it ignores it, such as `and`
+when the first parameter is False).
+
+### scanl, scanr, scanl1 and scanr1
+
+Just like their fold equivalents, except instead of returning the final value
+of the accumulator, they return a list of all its intermediate values, e.g.
+
+    > scanl (+) 0 [3,5,2,1]
+    [0,3,8,10,11]
+
+scanl appends intermediate accumulators to the result. scanr effectively
+prepends them.
+
+    > scanr (+) 0 [3,5,2,1]
+    [11,8,3,1,0]
+
+Example: how many elements does it take for the sum of the square root of all
+natural numbers to exceed 1000:
+
+    sqrtSums :: Int
+    sqrtSums = length takeWhile (<1000) (scanl1 (+) (map sqrt [1..]))) + 1
+
+The scanl1 returns an infinite list of the accumulated sum of the square roots.
+The takeWhile truncates that list. The + 1 corrects for the fact that we want
+the sum to _exceed_ 1000.

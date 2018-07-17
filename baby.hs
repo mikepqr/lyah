@@ -120,3 +120,10 @@ addThree a b c = a + b + c
 
 addThree' :: Int -> Int -> Int -> Int
 addThree' = \a -> (\b -> (\c -> a + b + c))
+
+sum' xs = foldl f 0 xs
+    where f a b = a + b
+
+sqrtSums :: Int
+sqrtSums = length (takeWhile (<1000) (scanl1 (+) (map sqrt [1..]))) + 1
+
