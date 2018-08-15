@@ -1,3 +1,6 @@
+import Data.Char
+import qualified Data.Map as Map
+
 doubleMe x = x + x
 
 doubleUs x y = x * 2 + y * 2
@@ -130,3 +133,19 @@ sqrtSums = length (takeWhile (<1000) (scanl1 (+) (map sqrt [1..]))) + 1
 oddSquareSum :: Integer
 oddSquareSum = sum (takeWhile (<10000) (filter odd (map (^2) [1..])))
 oddSquareSum' = (sum . takeWhile (<10000) . filter odd . map (^2))
+
+encode :: Int -> String -> String
+encode offset msg = map (chr . (+ offset) . ord) msg
+
+
+phoneBook =
+    [("betty", "555-2938")
+    ,("bonnie", "452-2928")
+    ,("patsy", "493-2928")
+    ,("lucille", "205-2928")
+    ,("wendy", "939-8282")
+    ,("penny", "853-2492")
+    ]
+
+findKey key xs = snd . head . filter (\(k, v) -> key == k) $ xs
+
