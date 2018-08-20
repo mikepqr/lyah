@@ -149,3 +149,7 @@ phoneBook =
 
 findKey key xs = snd . head . filter (\(k, v) -> key == k) $ xs
 
+data Person = Person { firstName :: String
+                     , lastName :: String
+                     , age :: Int
+                     } deriving (Eq, Show, Read)
