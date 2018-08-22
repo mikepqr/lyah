@@ -153,3 +153,5 @@ data Person = Person { firstName :: String
                      , lastName :: String
                      , age :: Int
                      } deriving (Eq, Show, Read)
+
+data List a = Empty | Cons a (List a) deriving (Show, Read, Eq, Ord)
