@@ -157,3 +157,95 @@ functions.
     appendFile :: FilePath -> String -> IO ()
 
 `FilePath` is essentially synonymous with `String`.
+
+## Todo list app
+
+appendtodo.hs
+
+    import System.IO
+
+    main = do
+        todoItem <- getLine
+        appendFile "todo.txt" (todoItem ++ "\n")
+
+Deleting items is trickier
+
+```
+import System.IO
+import System.Directory
+import Data.List
+
+main = do
+    contents <- readFile "todo.txt"
+    let todoTasks = lines contents
+    numberedTasks = zipWith (\n line -> show n ++ " - " ++ line) [0..] todoTasks
+
+    putStrLn "These are your TO-DO items:"
+    mapM_ putStrLn numberedTasks
+    putStrLn "Which one do you want to delete?"
+    numberString <- getLine
+    let number = read numberString
+
+    newTodoItems = unlines $ delete (todoTasks !! number) todoTasks
+
+    (tempName, tempHandle) <- openTempFile "." "temp"
+    hPutStr tempHandle newTodoItems
+    hClose tempHandle
+    removeFile "todo.txt"
+    renameFile tempName "todo.txt"
+```
+
+This line
+
+    numberedTasks = zipWith (\n line -> show n ++ " - " ++ line) [0..] todoTasks
+
+maps `["Feed cat", "Walk dog"]` to `["0 - Feed cat", "1 - Walk dog"]`
+
+`numberString` is a string, `number = read numberString` is an `Int`.
+
+Recall `mylist !! x` extracts the xth element from `mylist`. `newTodoItems` is
+therefore the original list with the xth item removed.
+
+The rest is pretty obvious. It writes to a temporary file before clobbering the
+old todo.txt.
+
+### Cleanup
+
+However, the temporary file doesn't get cleaned up if something goes wrong
+after we open it but before we rename it.
+
+We'll use `bracketOnError`. `bracket` is like `__exit__` or `finally`.
+`bracketOnError` is more like regular `except`, i.e. it is run if there's an
+exception.
+
+So we'll change
+
+    (tempName, tempHandle) <- openTempFile "." "temp"
+    hPutStr tempHandle newTodoItems
+    hClose tempHandle
+    removeFile "todo.txt"
+    renameFile tempName "todo.txt"
+
+to
+
+    bracketOnError (openTempFile "." "temp")
+        (\(tempName, tempHandle) -> do
+            hClose tempHandle
+            removeFile tempName)
+        (\(tempName, tempHandle) -> do
+            hPutStr tempHandle newTodoItems
+            hClose tempHandle
+            removeFile "todo.txt"
+            renameFile tempName "todo.txt")
+
+bracketOnError takes an action item, a function that takes the action item and
+cleans up if an an exception occurs results in an exception, and a function
+that does the normal thing to the action item. It's a bit like:
+
+    except:
+        cleanup
+    try:
+        a thing
+
+in that the except block (the function that takes the action item) comes before
+the try block.
