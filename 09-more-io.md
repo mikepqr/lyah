@@ -178,15 +178,14 @@ import Data.List
 main = do
     contents <- readFile "todo.txt"
     let todoTasks = lines contents
-    numberedTasks = zipWith (\n line -> show n ++ " - " ++ line) [0..] todoTasks
+        numberedTasks = zipWith (\n line -> show n ++ " - " ++ line) [0..] todoTasks
 
     putStrLn "These are your TO-DO items:"
     mapM_ putStrLn numberedTasks
     putStrLn "Which one do you want to delete?"
     numberString <- getLine
     let number = read numberString
-
-    newTodoItems = unlines $ delete (todoTasks !! number) todoTasks
+        newTodoItems = unlines $ delete (todoTasks !! number) todoTasks
 
     (tempName, tempHandle) <- openTempFile "." "temp"
     hPutStr tempHandle newTodoItems
@@ -194,6 +193,8 @@ main = do
     removeFile "todo.txt"
     renameFile tempName "todo.txt"
 ```
+
+The indentation after each `let` is significant.
 
 This line
 
@@ -249,3 +250,131 @@ that does the normal thing to the action item. It's a bit like:
 
 in that the except block (the function that takes the action item) comes before
 the try block.
+
+## Command line arguments
+
+Use the `getProgName` to get `sys.argv[0]`. Use `getArgs` to get
+`sys.argv[1:]`. Both in `System.Environment`, e.g.
+
+    import System.Environment
+    import Data.List
+
+    main = do
+       args <- getArgs
+       progName <- getProgName
+       putStrLn "The arguments are:"
+       mapM putStrLn args
+       putStrLn "The program name is:"
+       putStrLn progName
+
+## To-do with command line arguments
+
+We want
+
+    $ ./todo add todo.txt "Find the magic sword of power"
+    $ ./todo view todo.txt
+    $ ./todo remove todo.txt 2
+
+Here's the program (with notes)
+
+```
+import System.Environment
+import System.Directory
+import System.IO
+import Data.List
+```
+
+This function takes a string (a command like "add") and returns a function that
+takes a list of arguments and returns an IO action (one of `add`, `view` or
+`remove` (all of which are defined elsewhere).
+
+```
+dispatch :: String -> [String] -> IO ()
+dispatch "add" = add
+dispatch "view" = view
+dispatch "remove" = remove
+```
+
+The main program:
+
+```
+main = do
+    (command:argList) <- getArgs
+    dispatch command argList
+```
+
+The `(command:argList) <- getArgs` syntax puts the first argument in `command`
+and the remainder in `argList`.
+
+The `add` function is obvious:
+
+```
+add :: [String] -> IO ()
+add [fileName, todoItem] = appendFile fileName (todoItem ++ "\n")
+```
+
+`view` receives a list of arguments, but that list should be of length one, so
+we pattern match out the first as `fileName` then print the file with prepended
+numbers as before:
+
+```
+view :: [String] -> IO ()
+view [fileName] = do
+    contents <- readFile fileName
+    let todoTasks = lines contents
+        numberedTasks = zipWith (\n line -> show n ++ " - " ++ line)
+                        [0..] todoTasks
+    putStr $ unlines numberedTasks
+```
+
+The remove function works as before (except with pattern matching on the
+arguments rather than prompting the user for input).
+
+```
+remove :: [String] -> IO ()
+remove [fileName, numberString] = do
+    contents <- readFile fileName
+    let todoTasks = lines contents
+        number = read numberString
+        newTodoItems = unlines $ delete (todoTasks !! number) todoTasks
+    bracketOnError (openTempFile "." "temp")
+        (\(tempName, tempHandle) -> do
+            hClose tempHandle
+            removeFile tempName)
+        (\(tempName, tempHandle) -> do
+            hPutStr tempHandle newTodoItems
+            hClose tempHandle
+            removeFile fileName
+            renameFile tempName fileName)
+```
+
+End program.
+
+Adding a `bump` dispatch to move an item to the start of the list looks a lot
+like `remove`:
+
+    bump :: [String] -> IO ()
+    bump [fileName, numberString] = do
+        contents <- readFile fileName
+        let todoTasks = lines contents
+            number = read numberString
+            bumpedItem = todoTasks !! number
+            newTodoItems = unlines $ bumpedItem : delete (todoTasks !! number) todoTasks
+
+        bracketOnError (openTempFile "." "temp")
+            (\(tempName, tempHandle) -> do
+                hClose tempHandle
+                removeFile tempName)
+            (\(tempName, tempHandle) -> do
+                hPutStr tempHandle newTodoItems
+                hClose tempHandle
+                removeFile fileName
+                renameFile tempName fileName)
+
+These lines
+
+    bumpedItem = todoTasks !! number
+    newTodoItems = unlines $ bumpedItem : delete (todoTasks !! number) todoTasks
+
+Extract out the bumped item, delete it from the list, prepend it to the list,
+then reassemble the string.
