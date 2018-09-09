@@ -378,3 +378,76 @@ These lines
 
 Extract out the bumped item, delete it from the list, prepend it to the list,
 then reassemble the string.
+
+### Handling bad input
+
+e.g.
+
+    add :: [String] -> IO ()
+    add [fileName, todoItem] = appendFile fileName (todoItem ++ "\n")
+    add _ = putStrLn "The add command takes exactly two arguments"
+
+## Randomness
+
+This section uses `System.Random` (e.g. `+m System.Random`) which was removed
+from the Haskell standard library some time since the book was published.
+`stack` is a tool for installing an isolated GHC and individual isolated
+projects with their own dependencies. You can get `System.Random` by doing, e.g.
+
+    $ brew install haskell-stack
+    $ stack new my-project
+    $ cd my-project
+    $ vim package.yaml
+        # add `random` to dependencies
+    $ stack build
+    $ stack ghci
+    > `+m System.Random`
+
+`random` returns a random value of type `a`
+
+    random :: (RandomGen g, Random a) => g -> (a, g)
+
+It takes a `RandomGen` and returns the random value and a new `RandomGen` that
+can be used in a next call.
+
+`mkStdGen` makes one of these `RandomGen` variables. It takes an integer (the
+seed).
+
+    > random (mkStdGen 100) :: (Int, StdGen)
+    (-1352021624,651872571 1655838864)
+
+Here `-1352021624` is the random value, and the second return thing is a
+textual representation of the random generator. Note we needed to specify the
+type we wanted back with `:: (Int, StdGen)` in this case.
+
+So we can do this:
+
+    threeCoins :: StdGen -> (Bool, Bool, Bool)
+    threeCoins gen =
+        let (firstCoin, newGen) = random gen
+            (secondCoin, newGen') = random newGen
+            (thirdCoin, newGen'') = random newGen'
+        in  (firstCoin, secondCoin, thirdCoin)
+
+Note in this case Haskell could infer the required type of of the first value
+returned by the `random` calls (`Bool`) from context. 
+
+`randoms` takes a `RandomGen` and returns an infinite sequence of random
+values, e.g.
+
+    > take 5 $ randoms (mkStdGen 11) :: [Int]
+    [-1807975507,545074951,-1015194702,-1622477312,-502893664]
+
+It's implemented something like this (recursively):
+
+    randoms' :: (RandomGen g, Random a) => g -> [a]
+    randoms' gen = let (value, newGen) = random gen in value:randoms' newGen
+
+`randomR` takes a range and a generator and produces values in that range.
+`randomRs` produces a stream of such values.
+
+    > randomR (1,3) (mkStdGen 100)
+    (3,4041414 40692)
+    > randomR (1.5,3) (mkStdGen 100)
+    (2.3613082150951104,693699796 2103410263)
+    > take 10 $ randomRs ('a','z') (mkStdGen 100)
