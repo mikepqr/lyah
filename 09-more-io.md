@@ -451,3 +451,114 @@ It's implemented something like this (recursively):
     > randomR (1.5,3) (mkStdGen 100)
     (2.3613082150951104,693699796 2103410263)
     > take 10 $ randomRs ('a','z') (mkStdGen 100)
+
+## Randomness and IO
+
+`getStdGen` gets the global generator as an IO action. E.g. this program prints
+a different random ten characters every time it is run
+
+    import System.Random
+
+    main = do
+        gen <- getStdGen
+        putStrLn $ take 20 (randomRs ('a','z') gen)
+
+
+Note however that `getStdGen` gives you the same global generator if it is run
+multiple times in a program.
+
+Unless, that is, we use `newStdGen` instead, which yields a generator and
+updates the global generator as a second side effect.
+
+## `reads`
+
+reads returns an empty list when it fails to read a string. When it succeeds,
+it returns a singleton list with a tuple that has your desired value as one
+component and a string with what it didn't consume as the other.
+
+    > reads "1 2 3" :: [(Int, String)]
+    [(1," 2 3")]
+    > reads "(1,2) (3,4)" :: [((Int, Int), String)]
+    [((1,2)," (3,4)")]
+
+## Bytestrings
+
+Lists are lazy which can be inefficient.
+
+Bytestrings are sort of like lists, only each element is one byte (or 8 bits)
+in size. The way they handle laziness is also different. 
+
+> Whenever you need better performance in a program that reads a lot of data
+> into strings, give bytestrings a try. Chances are you’ll get some good
+> performance boosts with very little effort on your part. I usually write
+> programs using normal strings and then convert them to use bytestrings if the
+> performance is not satisfactory.
+
+Strict bytestrings reside in `Data.ByteString`, and they do away with the
+laziness completely. A strict bytestring represents a series of bytes in an
+array. You can’t have things like infinite strict bytestrings
+
+The other variety of bytestrings resides in `Data.ByteString.Lazy`. Lazy
+bytestrings are stored in chunks, and each chunk has a size of 64KB. So if you
+evaluate a byte in a lazy bytestring (by printing it, for example), the first
+64KB will be evaluated. After that, it’s just a promise for the rest of the
+chunks. Lazy bytestrings are kind of like lists of strict bytestrings, with a
+size of 64KB
+
+`Data.ByteString.Lazy`, contains functions with the same names as the ones from
+`Data.List`, but the type signatures have `ByteString` instead of `[a]` and
+`Word8` instead of `a`.
+
+The `Word8` type is like `Int`, but it represents an unsigned 8-bit number,
+i.e. an integer in the range 0 to 255.
+
+    import qualified Data.ByteString.Lazy as B
+    import qualified Data.ByteString as S
+
+Then
+
+    > B.pack [99,97,110]
+    "can"
+    > ghci> B.pack [98..120]
+    "bcdefghijklmnopqrstuvwx"
+    > let by = B.pack [98,111,114,116]
+    > by
+    "bort"
+    > B.unpack by
+    [98,111,114,116]
+
+The pack function has the type signature `pack :: [Word8] -> ByteString`. This
+means that it takes a list of bytes of type Word8 and returns a ByteString. You
+can think of it as taking a list, which is lazy, and making it less lazy, so
+that it’s lazy only at 64KB intervals.
+
+## Efficiently copy a file with bytestrings
+
+The bytestring modules have a load of functions that are analogous to those in
+`Data.List`, including, but not limited to, `head`, `tail`, `init`, `null`,
+`length`, `map`, `reverse`, `foldl`, `foldr`, `concat`, `takeWhile`, `filter`,
+and so on.
+
+```
+import System.Environment
+import System.Directory
+import System.IO
+import Control.Exception
+import qualified Data.ByteString.Lazy as B
+
+main = do
+    (fileName1:fileName2:_) <- getArgs
+    copy fileName1 fileName2
+
+copy source dest = do
+    contents <- B.readFile source
+    bracketOnError
+        (openTempFile "." "temp")
+        (\(tempName, tempHandle) -> do
+            hClose tempHandle
+            removeFile tempName)
+        (\(tempName, tempHandle) -> do
+            B.hPutStr tempHandle contents
+            hClose tempHandle
+            renameFile tempName dest)
+```
