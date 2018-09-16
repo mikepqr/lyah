@@ -389,3 +389,188 @@ can be rewritten
 
 This definition follows the Applicative law we mentioned: `pure f <*> xs`
 equals `fmap f xs`.
+
+### Applicative IO
+
+```
+instance Applicative IO where
+    pure = return
+    a <*> b = do
+        f <- a
+        x <- b
+        return (f x)
+```
+
+`pure` puts value in a minimal context that still holds the value as the
+result, so this definition makes sense for IO.
+
+`<*>` takes the I/O action `a`, which yields a function, performs the function,
+and binds that function to `f`. Then it performs `b` and binds its result to `x`.
+Finally, it applies the function `f` to `x` and yields that as the result.
+
+So `<*>` sequences two IOs. Which means that this
+
+    myAction :: IO String
+    myAction = do
+        a <- getLine
+        b <- getLine
+        return $ a ++ b
+
+could be implemented as
+
+```
+myAction :: IO String
+myAction = (++) <$> getLine <*> getLine
+```
+
+## Applicative ziplists
+
+`ZipList` lives in `Control.Applicative`.
+
+Whereas `<*>` on lists resulted in the function being applied to every pairwise
+combination, for ziplists it results in elementwise application.
+
+```
+instance Applicative ZipList where
+        pure x = ZipList (repeat x)
+        ZipList fs <*> ZipList xs = ZipList (zipWith (\f x -> f x) fs xs)
+```
+
+`ZipList` is not in show so you have to call `getZipList` to extract a raw
+list, which allows us to see these functions in action:
+
+```
+getZipList $ (+) <$> ZipList [1,2,3] <*> ZipList [100,100,100]
+[101,102,103]
+```
+
+### Applicative Laws
+
+There are a few but the most important is
+
+```
+pure f <*> x = fmap f x
+```
+
+## Key difference between functors and applicative functors
+
+> With ordinary functors, we can just map functions over one functor value.
+> With applicative functors, we can apply a function between several functor
+> values
+
+So if you need to map a function that takes several parameters, you need
+applicative functors.
+
+### `liftA2`
+
+In `Control.Applicative`. Defined
+
+```
+liftA2 f a b = f <$> a <*> b
+```
+
+i.e. instead of doing
+
+```
+> (\x y -> x + y) <$> [1] <*> [2,3,4]
+[3,4,5]
+```
+
+we can do
+
+```
+> liftA2 (\x y -> x + y) [1] [2,3,4]
+[3,4,5]
+```
+
+This is lifting in the same sense as `fmap` lifts functions to they can be
+applied to functors (see above), but for applicative functors.
+
+```
+> liftA2 (:) (Just 3) (Just [4])
+Just [3,4]
+> (:) <$> (Just 3) <*> (Just [4])
+Just [3,4]
+```
+
+If we want to combine a list of applicative values into a single applicative
+value containing a list of those values we can use `sequenceA` which is defined
+like this
+
+```
+sequenceA :: (Applicative f) => [f a] -> f [a]
+sequenceA [] = pure []
+sequenceA (x:xs) = (:) <$> x <*> sequenceA xs
+```
+
+such that
+
+```
+> sequenceA [Just 3, Just 4]
+Just [3,4]
+```
+
+`sequenceA` could be defined with a fold
+
+```
+sequenceA :: (Applicative f) => [f a] -> f [a]
+sequenceA = foldr (liftA2 (:)) (pure [])
+```
+
+Note its behaviour
+
+```
+> sequenceA [Just 3, Just 2, Just 1]
+Just [3,2,1]
+> sequenceA [Just 3, Nothing, Just 1]
+Nothing
+```
+
+A single `Nothing` in the list "pollutes" the result. Not sure I understand
+this from the defintion of sequenceA but seems handy.
+
+```
+> sequenceA [(+3),(+2),(+1)] 3
+[6,5,4]
+```
+
+> Doing `(+) <$> (+3) <*> (*2)` will create a function that takes a parameter,
+> feeds it to both `(+3)` and `(*2)`, and then calls `+` with those two results.
+> In the same vein, it makes sense that `sequenceA [(+3),(*2)]` makes a function
+> that takes a parameter and feeds it to all of the functions in the list.
+> Instead of calling `+` with the results of the functions, a combination of `:`
+> and `pure []` is used to gather those results in a list, which is the result of
+> that function.
+
+So to determine if a number satisfies a list of predicates
+
+```
+> sequenceA [(>4),(<10),odd] 7
+[True,True,True]
+> and $ sequenceA [(>4),(<10),odd] 7
+True
+```
+
+One way of thinking of `(+) <$> [1,2] <*> [4,5,6]` is that it's doing a
+non-deterministic computation `x + y`, where `x` takes on every value from
+`[1,2]` and `y` takes on every value from `[4,5,6]`. We represent that as a
+list that holds all of the possible results.
+
+```
+> sequenceA [[1,2,3],[4,5,6]]
+[[1,4],[1,5],[1,6],[2,4],[2,5],[2,6],[3,4],[3,5],[3,6]]
+```
+
+Similarly, when we call `sequenceA [[1,2],[3,4],[5,6]]`, the result is a
+nondeterministic computation `[x,y,z]`, where `x` takes on every value from
+`[1,2]`, y takes on every value from `[3,4]` and so on. To represent the result
+of that nondeterministic computation, we use a list, where each element in the
+list is one possible list. That’s why the result is a list of lists.
+
+When used with I/O actions, `sequenceA` is the same thing as `sequence`:
+
+    > sequenceA [getLine, getLine, getLine]
+    heyh
+    ho
+    woo
+    ["heyh","ho","woo"]
